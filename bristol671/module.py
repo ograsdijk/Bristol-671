@@ -52,7 +52,10 @@ class Bristol671(scpi.Instrument):
         assert isinstance(data, MeasureData)
         assert isinstance(method, MeasureMethod)
         val = getattr(self, f"{method.name.lower()}_{data.name.lower()}")
-        return convert_to_unit(val, data, unit)
+        if unit is None:
+            return val
+        else:
+            return convert_to_unit(val, data, unit)
 
     @property
     def event_status_enable_register(self) -> EventStatusEnableRegister:
