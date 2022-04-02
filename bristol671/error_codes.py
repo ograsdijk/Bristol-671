@@ -15,4 +15,3 @@ class SCPIErrors(Enum):
     SETTINGS_CONFLICT = -221
     DATA_OUT_OF_RANGE = -222
     DATA_CORRUPT_OR_STALE = -230
-
