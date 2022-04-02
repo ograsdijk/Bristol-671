@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional, Union
 
 import easy_scpi as scpi
 from astropy.units.core import NamedUnit
@@ -35,7 +35,7 @@ class Bristol671(scpi.Instrument):
 
     def get(
         self, data: MeasureData, method: MeasureMethod, unit: Optional[NamedUnit] = None
-    ) -> Tuple[float, int, WavemeterData, Environment]:
+    ) -> Union[float, int, WavemeterData, Environment]:
         """
         Get a `data` type measurement using method `method` with the units given by
         `unit`.
@@ -46,7 +46,7 @@ class Bristol671(scpi.Instrument):
             unit (Optional[Unit], optional): Unit to convert data to. Defaults to None.
 
         Returns:
-            Tuple[float, int, WavemeterData, Environment]: value for the specified
+            Union[float, int, WavemeterData, Environment]: value for the specified
             `data` type and specified `method` converted to the specified `unit`
         """
         assert isinstance(data, MeasureData)
