@@ -60,7 +60,7 @@ class Bits:
         self.value: int = value
         self.enum = enum
         self.size: int = size
-        self.fault_bits: tuple = fault_bits
+        self.fault_bits: Optional[tuple] = fault_bits
 
     def get_set_bits(self) -> tuple:
         """
@@ -136,7 +136,10 @@ class Bits:
         Returns:
             tuple: faults active in register by enum value
         """
-        return tuple([self.get_value(fault_bit) for fault_bit in self.fault_bits])
+        if self.fault_bits is None:
+            return ()
+        else:
+            return tuple([self.get_value(fault_bit) for fault_bit in self.fault_bits])
 
     @property
     def is_ok(self) -> bool:

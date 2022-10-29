@@ -99,9 +99,8 @@ def convert_environment_to_environment_data(val: str) -> Environment:
         Environment: dataclass containing temperature and pressure
     """
     values = val.split(",")
-    values[0] = float(values[0].strip("C"))
-    values[1] = float(values[1].strip("MMHG"))
-    return Environment(*values)
+    _values = [float(values[0].strip("C")), float(values[1].strip("MMHG"))]
+    return Environment(*_values)
 
 
 def convert_all_to_bristol_data(val: str) -> WavemeterData:
@@ -116,8 +115,8 @@ def convert_all_to_bristol_data(val: str) -> WavemeterData:
         BristolData: _description_
     """
     values = val.split(",")
-    values = [t(val) for t, val in zip((int, int, float, float), values)]
-    return WavemeterData(*values)
+    _values = [t(val) for t, val in zip((int, int, float, float), values)]
+    return WavemeterData(*_values)
 
 
 def convert_sytem_error(val: str) -> SCPIErrors:
@@ -131,7 +130,7 @@ def convert_sytem_error(val: str) -> SCPIErrors:
     Returns:
         SCPIErrors: enum describing the SCPI error
     """
-    return SCPIErrors(int(val.split(",")))
+    return SCPIErrors([int(v) for v in val.split(",")])
 
 
 def convert_average_state(val: str) -> bool:

@@ -497,7 +497,8 @@ class Bristol671(scpi.Instrument):
         unit_power = self.unit.power()
         if unit_power == "DBM":
             return PowerUnit.dBm
-        elif unit_power == "MW":
+        # elif unit_power == "MW":
+        else:
             return PowerUnit.mW
 
     @unit_power.setter
