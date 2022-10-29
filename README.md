@@ -1,6 +1,6 @@
 # Bristol-671
- Python interface for the [Bristol 671]("https://www.bristol-inst.com/bristol-instruments-products/wavelength-meters-scientific/671-series-cw-lasers/") wavelength meter.  
- Has not been tested with the a connected wavelength meter yet.
+Python interface for the [Bristol 671]("https://www.bristol-inst.com/bristol-instruments-products/wavelength-meters-scientific/671-series-cw-lasers/") wavelength meter.  
+Has not been tested with the a connected wavelength meter yet.
 ## Install
 Install Bristol671 with `python setup.py install`
 ## Code Example
