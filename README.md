@@ -10,9 +10,9 @@ from bristol671 import Bristol671, MeasureData, MeasureMethod, PowerUnit
 
 wm = Bristol671(port = None)
 # frequency in THz
-freq = wm.get(MeasureData.FREQUENCY, MeasureMethod.READ)
+freq = wm.get_data(MeasureData.FREQUENCY, MeasureMethod.READ)
 # frequency in GHz
-freq = wm.get(MeasureData.FREQUENCY, MeasureMethod.READ, unit = units.GHz)
+freq = wm.get_data(MeasureData.FREQUENCY, MeasureMethod.READ, unit = units.GHz)
 
 # start averaging measurement over the last 8 measurements
 wm.average_count = 8

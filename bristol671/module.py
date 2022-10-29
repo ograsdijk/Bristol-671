@@ -33,7 +33,7 @@ class Bristol671(scpi.Instrument):
     def __repr__(self):
         return f"Bristol671(port = {self.port})"
 
-    def get(
+    def get_data(
         self, data: MeasureData, method: MeasureMethod, unit: Optional[NamedUnit] = None
     ) -> Union[float, int, WavemeterData, Environment]:
         """
