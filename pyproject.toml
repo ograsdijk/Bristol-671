@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "bristol-671"
+version = "0.1.0"
+description = "Python interface for the Bristol 671 wavelength meter"
+authors = ["ograsdijk <o.grasdijk@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "bristol_671"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+easy-scpi = "^0.1.4"
+astropy = "^5.2.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
