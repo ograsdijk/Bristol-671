@@ -132,7 +132,7 @@ class Bits:
         return set_values
 
     @property
-    def faults(self) -> tuple[Enum, ...]:
+    def faults(self) -> tuple[Enum, ...] | None:
         """
         Faults active in register.
 
@@ -140,7 +140,7 @@ class Bits:
             tuple: faults active in register by enum value
         """
         if self.fault_bits is None:
-            return ()
+            None
         else:
             return tuple(
                 [
@@ -158,7 +158,7 @@ class Bits:
         Returns:
             bool: True if register has no faults, else False
         """
-        return len(self.faults) == 0
+        return False if self.faults is None else True
 
     def __repr__(self) -> str:
         name = self.enum.__name__.strip("Bits")
