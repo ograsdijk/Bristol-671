@@ -16,3 +16,12 @@ astropy = "^5.2.1"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.mypy]
+
+[[tool.mypy.overrides]]
+module = [
+    "easy_scpi",
+    "astropy.*",
+]
+ignore_missing_imports = true

@@ -6,7 +6,7 @@ Install Bristol671 with `python setup.py install`
 ## Code Example
 ```Python
 from astropy import units
-from bristol671 import Bristol671, MeasureData, MeasureMethod, PowerUnit
+from bristol_671 import Bristol671, MeasureData, MeasureMethod, PowerUnit
 
 wm = Bristol671(port = None)
 # frequency in THz

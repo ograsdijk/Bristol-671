@@ -62,7 +62,7 @@ class Bits:
         self.size: int = size
         self.fault_bits: Optional[tuple] = fault_bits
 
-    def get_set_bits(self) -> tuple:
+    def get_set_bits(self) -> tuple[int, ...]:
         """
         Get the set bits in the register.
 
@@ -119,17 +119,20 @@ class Bits:
         """
         return self.get_bit(enum.value)
 
-    def get_set_values(self) -> tuple:
+    def get_set_values(self) -> tuple[str, ...]:
         """
         Get all set bit enum values.
 
         Returns:
             tuple: set bit enum values
         """
-        return tuple([self.enum(bit).name for bit in self.get_set_bits()])
+        set_values: tuple[str, ...] = tuple(
+            [self.enum(bit).name for bit in self.get_set_bits()]
+        )
+        return set_values
 
     @property
-    def faults(self) -> tuple:
+    def faults(self) -> tuple[Enum, ...]:
         """
         Faults active in register.
 
@@ -139,7 +142,13 @@ class Bits:
         if self.fault_bits is None:
             return ()
         else:
-            return tuple([self.get_value(fault_bit) for fault_bit in self.fault_bits])
+            return tuple(
+                [
+                    self.enum(fault_bit)
+                    for fault_bit in self.fault_bits
+                    if self.get_bit(fault_bit)
+                ]
+            )
 
     @property
     def is_ok(self) -> bool:

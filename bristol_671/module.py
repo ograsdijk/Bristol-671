@@ -207,7 +207,7 @@ class Bristol671(scpi.Instrument):
         (*ESR?)
 
         Returns:
-            int: _description_
+            int: OPERATION COMPLETE bit
         """
         return to_int(self.query("*OPC?"))
 
