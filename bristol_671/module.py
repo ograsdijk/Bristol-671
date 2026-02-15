@@ -1,20 +1,22 @@
-from typing import Optional, Union
+from typing import Any, Literal, Optional, TypeAlias, overload
 
 import easy_scpi as scpi
-from astropy.units.core import NamedUnit
 
 from .conversion_handling import (
     Environment,
+    UnitLike,
     WavemeterData,
     convert_all_to_bristol_data,
     convert_average_state,
     convert_environment_to_environment_data,
-    convert_sytem_error,
+    convert_system_error,
     convert_to_unit,
+    parse_system_error,
     to_float,
     to_int,
 )
 from .error_codes import SCPIErrors
+from .exceptions import SCPICommandError
 from .registers import (
     EventStatusEnableRegister,
     EventStatusRegister,
@@ -23,9 +25,18 @@ from .registers import (
 )
 from .selection_enums import MeasureData, MeasureMethod, PowerUnit
 
+MeasurementResult: TypeAlias = float | Environment | WavemeterData | Any
+
 
 class Bristol671(scpi.Instrument):
-    def __init__(self, port, timeout=2):
+    def __init__(self, port: str | None, timeout: float = 2.0):
+        """
+        Initialize a Bristol 671 instrument connection.
+
+        Args:
+            port (str | None): SCPI resource/port identifier.
+            timeout (float): communication timeout in seconds.
+        """
         super().__init__(
             port=port, timeout=timeout, read_termination="\n", write_termination="\n"
         )
@@ -33,9 +44,107 @@ class Bristol671(scpi.Instrument):
     def __repr__(self):
         return f"Bristol671(port = {self.port})"
 
+    def __enter__(self) -> "Bristol671":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        close_method = getattr(self, "close", None)
+        if callable(close_method):
+            close_method()
+
+    def drain_error_queue(
+        self, *, raise_on_error: bool = False, max_reads: int = 32
+    ) -> list[tuple[SCPIErrors, str]]:
+        """
+        Drain SYSTEM:ERROR? FIFO queue.
+
+        Args:
+            raise_on_error (bool): if True, raise after draining when non-zero
+                errors are found.
+            max_reads (int): safety cap to prevent infinite reads.
+
+        Returns:
+            list[tuple[SCPIErrors, str]]: all parsed queue entries, including final
+                NO_ERROR when observed.
+        """
+        if max_reads <= 0:
+            raise ValueError("max_reads must be > 0")
+
+        entries: list[tuple[SCPIErrors, str]] = []
+        for _ in range(max_reads):
+            code, message = parse_system_error(self.system.error())
+            try:
+                error = SCPIErrors(code)
+            except ValueError as exc:
+                raise SCPICommandError(f"Unknown SCPI error code: {code}") from exc
+
+            entries.append((error, message))
+            if error == SCPIErrors.NO_ERROR:
+                break
+        else:
+            raise SCPICommandError(
+                f"SYSTEM:ERROR queue did not terminate with NO_ERROR within {max_reads} reads"
+            )
+
+        if raise_on_error:
+            active_errors = [
+                entry for entry in entries if entry[0] != SCPIErrors.NO_ERROR
+            ]
+            if active_errors:
+                details = "; ".join(
+                    [f"{err.value}: {msg}" for err, msg in active_errors]
+                )
+                raise SCPICommandError(
+                    f"SCPI error queue contains active errors: {details}"
+                )
+
+        return entries
+
+    @overload
     def get_data(
-        self, data: MeasureData, method: MeasureMethod, unit: Optional[NamedUnit] = None
-    ) -> Union[float, int, WavemeterData, Environment]:
+        self,
+        data: Literal[
+            MeasureData.POWER,
+            MeasureData.FREQUENCY,
+            MeasureData.WAVELENGTH,
+            MeasureData.WAVENUMBER,
+        ],
+        method: MeasureMethod,
+        unit: UnitLike,
+    ) -> Any: ...
+
+    @overload
+    def get_data(
+        self,
+        data: Literal[
+            MeasureData.POWER,
+            MeasureData.FREQUENCY,
+            MeasureData.WAVELENGTH,
+            MeasureData.WAVENUMBER,
+        ],
+        method: MeasureMethod,
+        unit: None = None,
+    ) -> float: ...
+
+    @overload
+    def get_data(
+        self,
+        data: Literal[MeasureData.ENVIRONMENT],
+        method: MeasureMethod,
+        unit: None = None,
+    ) -> Environment: ...
+
+    @overload
+    def get_data(
+        self,
+        data: Literal[MeasureData.ALL],
+        method: MeasureMethod,
+        unit: None = None,
+    ) -> WavemeterData: ...
+
+    def get_data(
+        self, data: MeasureData, method: MeasureMethod, unit: Optional[UnitLike] = None
+    ) -> MeasurementResult:
         """
         Get a `data` type measurement using method `method` with the units given by
         `unit`.
@@ -49,13 +158,21 @@ class Bristol671(scpi.Instrument):
             Union[float, int, WavemeterData, Environment]: value for the specified
             `data` type and specified `method` converted to the specified `unit`
         """
-        assert isinstance(data, MeasureData)
-        assert isinstance(method, MeasureMethod)
-        val = getattr(self, f"{method.name.lower()}_{data.name.lower()}")
+        if not isinstance(data, MeasureData):
+            raise TypeError("data must be an instance of MeasureData")
+        if not isinstance(method, MeasureMethod):
+            raise TypeError("method must be an instance of MeasureMethod")
+
+        val = getattr(self, f"{method.name.lower()}_{data.name.lower()}")()
         if unit is None:
             return val
         else:
-            return convert_to_unit(val, data, unit)
+            if data in (MeasureData.ENVIRONMENT, MeasureData.ALL):
+                raise SCPICommandError(
+                    f"Unit conversion is not supported for {data.name}"
+                )
+            power_unit = self.unit_power if data == MeasureData.POWER else None
+            return convert_to_unit(val, data, unit=unit, power_unit=power_unit)
 
     @property
     def event_status_enable_register(self) -> EventStatusEnableRegister:
@@ -153,12 +270,19 @@ class Bristol671(scpi.Instrument):
         Args:
             val (int): integer value of the questionable enable register
         """
-        assert isinstance(value, int)
+        if not isinstance(value, int):
+            raise TypeError("value must be an int")
         self.status.questionable.enable(value)
+
+    def clear_status(self) -> None:
+        """
+        Alias for `CLS`.
+        """
+        self.CLS()
 
     def CLS(self) -> None:
         """
-        Clear the event satus register (ESE) and error queue (SYSTEM:ERROR)
+        Clear the event status register (ESE) and error queue (SYSTEM:ERROR).
         """
         self.write("*CLS")
 
@@ -181,6 +305,10 @@ class Bristol671(scpi.Instrument):
         Args:
             val (int): integer value of the standard status enable register
         """
+        if not isinstance(val, int):
+            raise TypeError("val must be an int")
+        if not 0 <= val <= 255:
+            raise SCPICommandError("val must be in range [0, 255] for *ESE")
         self.write(f"*ESE {val}")
 
     @property
@@ -211,17 +339,35 @@ class Bristol671(scpi.Instrument):
         """
         return to_int(self.query("*OPC?"))
 
+    def restore_state(self) -> None:
+        """
+        Alias for `RCL`.
+        """
+        self.RCL()
+
     def RCL(self) -> None:
         """
-        Restore instrument settings from settings last saved with *SAV?.
+        Restore instrument settings from settings last saved with `SAV`.
         """
         self.write("*RCL")
+
+    def reset(self) -> None:
+        """
+        Alias for `RST`.
+        """
+        self.RST()
 
     def RST(self) -> None:
         """
         Reset instrument to default settings.
         """
         self.write("*RST")
+
+    def save_state(self) -> None:
+        """
+        Alias for `SAV`.
+        """
+        self.SAV()
 
     def SAV(self) -> None:
         """
@@ -439,7 +585,8 @@ class Bristol671(scpi.Instrument):
         Args:
             state (bool): True (ON), False (OFF)
         """
-        assert isinstance(state, bool)
+        if not isinstance(state, bool):
+            raise TypeError("state must be a bool")
         self.sense.average.state(state)
 
     @property
@@ -460,7 +607,10 @@ class Bristol671(scpi.Instrument):
         Args:
             count (int): number of samples to average.
         """
-        assert isinstance(count, int)
+        if not isinstance(count, int):
+            raise TypeError("count must be an int")
+        if count <= 0:
+            raise SCPICommandError("count must be > 0")
         self.sense.average.count(count)
 
     def get_average_data(self, data: MeasureData) -> float:
@@ -477,13 +627,17 @@ class Bristol671(scpi.Instrument):
         Returns:
             float: average value of the data enum value
         """
-        assert isinstance(data, MeasureData)
-        assert data in [
+        if not isinstance(data, MeasureData):
+            raise TypeError("data must be an instance of MeasureData")
+        if data not in [
             MeasureData.POWER,
             MeasureData.FREQUENCY,
             MeasureData.WAVELENGTH,
             MeasureData.WAVENUMBER,
-        ]
+        ]:
+            raise ValueError(
+                "data must be one of POWER, FREQUENCY, WAVELENGTH or WAVENUMBER"
+            )
         return self.query(f"SENSE:AVERAGE:DATA? {data.name}")
 
     @property
@@ -510,7 +664,8 @@ class Bristol671(scpi.Instrument):
         Args:
             unit (PowerUnit): enum with either mW or dBm
         """
-        assert isinstance(unit, PowerUnit)
+        if not isinstance(unit, PowerUnit):
+            raise TypeError("unit must be an instance of PowerUnit")
         self.unit.power(unit.name)
 
     @property
@@ -521,4 +676,15 @@ class Bristol671(scpi.Instrument):
         Returns:
             SCPIErrors: enum with the SCPI error value.
         """
-        return convert_sytem_error(self.system.error())
+        return convert_system_error(self.system.error())
+
+    @property
+    def system_error_message(self) -> str:
+        """
+        SYSTEM:ERROR?. Retrieve the current SCPI error queue message.
+
+        Returns:
+            str: textual SCPI error description.
+        """
+        _, message = parse_system_error(self.system.error())
+        return message

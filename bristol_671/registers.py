@@ -56,11 +56,17 @@ class Bits:
     Base class for holding register bit values.
     """
 
-    def __init__(self, value: int, enum, size: int, fault_bits: Optional[tuple] = None):
+    def __init__(
+        self,
+        value: int,
+        enum: type[Enum],
+        size: int,
+        fault_bits: Optional[tuple[int, ...]] = None,
+    ):
         self.value: int = value
-        self.enum = enum
+        self.enum: type[Enum] = enum
         self.size: int = size
-        self.fault_bits: Optional[tuple] = fault_bits
+        self.fault_bits: Optional[tuple[int, ...]] = fault_bits
 
     def get_set_bits(self) -> tuple[int, ...]:
         """
@@ -80,7 +86,8 @@ class Bits:
             bit (int): bit to set
             bit_value (int): bit set value, either 0 (not set) or 1 (set)
         """
-        assert bit_value in [0, 1]
+        if bit_value not in (0, 1):
+            raise ValueError("bit_value must be 0 or 1")
         value = self.value if self.value else 0
         value = value | (1 << bit) if bit_value else value & ~(1 << bit)
         self.value = value
@@ -140,7 +147,7 @@ class Bits:
             tuple: faults active in register by enum value
         """
         if self.fault_bits is None:
-            None
+            return None
         else:
             return tuple(
                 [
@@ -158,7 +165,8 @@ class Bits:
         Returns:
             bool: True if register has no faults, else False
         """
-        return False if self.faults is None else True
+        faults = self.faults
+        return True if faults is None else len(faults) == 0
 
     def __repr__(self) -> str:
         name = self.enum.__name__.strip("Bits")

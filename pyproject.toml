@@ -1,27 +1,45 @@
-[tool.poetry]
+[project]
 name = "bristol-671"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python interface for the Bristol 671 wavelength meter"
-authors = ["ograsdijk <o.grasdijk@gmail.com>"]
-license = "MIT"
 readme = "README.md"
-packages = [{include = "bristol_671"}]
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "ograsdijk", email = "o.grasdijk@gmail.com" }]
+dependencies = [
+    "easy-scpi>=0.1.4,<0.2.0",
+    "pint>=0.24,<1.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.9"
-easy-scpi = "^0.1.4"
-astropy = "^5.2.1"
+[project.urls]
+Homepage = "https://github.com/ograsdijk/Bristol-671"
+Repository = "https://github.com/ograsdijk/Bristol-671"
 
+[dependency-groups]
+dev = [
+    "mypy>=1.10.0",
+    "pytest>=8.0.0",
+    "ruff>=0.6.0",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bristol_671"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"bristol_671/py.typed" = "bristol_671/py.typed"
+
+[tool.uv]
+package = true
 
 [tool.mypy]
 
 [[tool.mypy.overrides]]
 module = [
     "easy_scpi",
-    "astropy.*",
+    "pint.*",
 ]
 ignore_missing_imports = true

@@ -1,12 +1,21 @@
 from dataclasses import dataclass
-
 from math import log10
+from typing import TYPE_CHECKING, Any, Optional, TypeAlias
 
-from astropy import units
-from astropy.units import cds
+from pint import UnitRegistry
 
 from .error_codes import SCPIErrors
+from .exceptions import BristolParseError
 from .selection_enums import MeasureData, PowerUnit
+
+if TYPE_CHECKING:
+    from pint import Quantity, Unit
+
+    UnitLike: TypeAlias = str | Unit | Quantity
+else:
+    UnitLike: TypeAlias = str | Any
+
+ureg: Any = UnitRegistry()
 
 
 @dataclass
@@ -87,6 +96,27 @@ def to_int(val: str) -> int:
     return int(val)
 
 
+def validate_response(value: str, expected_parts: int, context: str) -> list[str]:
+    """
+    Validate and split a comma-separated instrument response.
+
+    Args:
+        value (str): raw instrument response
+        expected_parts (int): expected number of comma-separated parts
+        context (str): context label included in error messages
+
+    Returns:
+        list[str]: stripped response parts
+    """
+    parts = [item.strip() for item in value.split(",")]
+    if len(parts) != expected_parts:
+        raise BristolParseError(
+            f"Invalid {context} response format: {value!r}; expected "
+            f"{expected_parts} comma-separated values"
+        )
+    return parts
+
+
 def convert_environment_to_environment_data(val: str) -> Environment:
     """
     Convert return string of FETCH/READ/MEASURE:ENV? to an Environment dataclass. String
@@ -98,9 +128,16 @@ def convert_environment_to_environment_data(val: str) -> Environment:
     Returns:
         Environment: dataclass containing temperature and pressure
     """
-    values = val.split(",")
-    _values = [float(values[0].strip("C")), float(values[1].strip("MMHG"))]
-    return Environment(*_values)
+    try:
+        parts = validate_response(val, expected_parts=2, context="ENVIRONMENT")
+        temperature_part, pressure_part = parts
+        temperature = float(temperature_part.split()[0])
+        pressure = float(pressure_part.split()[0])
+        return Environment(temperature=temperature, pressure=pressure)
+    except (IndexError, ValueError, BristolParseError) as exc:
+        raise BristolParseError(
+            f"Invalid environment response format: {val!r}"
+        ) from exc
 
 
 def convert_all_to_bristol_data(val: str) -> WavemeterData:
@@ -114,12 +151,20 @@ def convert_all_to_bristol_data(val: str) -> WavemeterData:
     Returns:
         BristolData: _description_
     """
-    values = val.split(",")
-    _values = [t(val) for t, val in zip((int, int, float, float), values)]
-    return WavemeterData(*_values)
+    try:
+        values = validate_response(val, expected_parts=4, context="ALL")
+
+        return WavemeterData(
+            scan_index=int(values[0]),
+            instrument_status=int(values[1]),
+            wavelength=float(values[2]),
+            power=float(values[3]),
+        )
+    except (IndexError, ValueError, BristolParseError) as exc:
+        raise BristolParseError(f"Invalid ALL response format: {val!r}") from exc
 
 
-def convert_sytem_error(val: str) -> SCPIErrors:
+def convert_system_error(val: str) -> SCPIErrors:
     """
     Convert return string of SYSTEM:ERROR? into a SCPIErrors enum to indicate the error
     state. String has format "{error number}, {error description}".
@@ -130,7 +175,38 @@ def convert_sytem_error(val: str) -> SCPIErrors:
     Returns:
         SCPIErrors: enum describing the SCPI error
     """
-    return SCPIErrors([int(v) for v in val.split(",")])
+    try:
+        error_number = int(val.split(",", 1)[0].strip())
+        return SCPIErrors(error_number)
+    except (ValueError, TypeError) as exc:
+        raise BristolParseError(f"Invalid SYSTEM:ERROR response: {val!r}") from exc
+
+
+def parse_system_error(val: str) -> tuple[int, str]:
+    """
+    Parse return string of SYSTEM:ERROR? into error code and error message.
+    String has format "{error number}, {error description}".
+
+    Args:
+        val (str): retrieved error from SYSTEM:ERROR? queue
+
+    Returns:
+        tuple[int, str]: (error code, error description)
+    """
+    error_code, separator, message = val.partition(",")
+    if not separator:
+        raise BristolParseError(
+            f"Invalid SYSTEM:ERROR response format (missing comma): {val!r}"
+        )
+
+    try:
+        code = int(error_code.strip())
+    except ValueError as exc:
+        raise BristolParseError(
+            f"Invalid SYSTEM:ERROR code in response: {val!r}"
+        ) from exc
+
+    return code, message.strip().strip('"')
 
 
 def convert_average_state(val: str) -> bool:
@@ -155,18 +231,22 @@ def convert_average_state(val: str) -> bool:
         raise ValueError("State not 'On' or 'Off' but '{val}'")
 
 
-def convert_to_unit(value, data: MeasureData, power_unit: PowerUnit, unit=None):
+def convert_to_unit(
+    value,
+    data: MeasureData,
+    unit: Optional[UnitLike],
+    power_unit: Optional[PowerUnit] = None,
+):
     if data == MeasureData.POWER:
+        if power_unit is None:
+            raise ValueError("power_unit must be provided when converting power data")
         if power_unit == PowerUnit.dBm:
             value = dBm_to_mW(value)
-        return (value * units.mW).to(unit)
+        return (value * ureg.milliwatt).to(unit)
     elif data == MeasureData.FREQUENCY:
-        return (value * units.THz).to(unit)
+        return (value * ureg.terahertz).to(unit)
     elif data == MeasureData.WAVELENGTH:
-        return (value * units.nm).to(unit)
+        return (value * ureg.nanometer).to(unit)
     elif data == MeasureData.WAVENUMBER:
-        return (value * (1 / units.cm)).to(unit)
-    elif data == MeasureData.ENVIRONMENT:
-        value[0] = value[0] * units.C
-        value[1] = value[1] * cds.mmHg.to(units.Pa)
-        return tuple(value)
+        return (value / ureg.centimeter).to(unit)
+    raise ValueError(f"Unit conversion is not supported for data type: {data.name}")
